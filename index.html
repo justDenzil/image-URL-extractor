@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image URL Extractor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.6.0/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        textarea {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px 0;
+        }
+        #modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0,0,0);
+            background-color: rgba(0,0,0,0.4);
+        }
+        #modalContent {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .progress-bar {
+            width: 100%;
+            background-color: #ddd;
+        }
+        .progress-bar-fill {
+            width: 0;
+            height: 30px;
+            background-color: #4caf50;
+            text-align: center;
+            line-height: 30px;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image URL Extractor</h1>
+    <textarea id="inputText" rows="10" placeholder="Paste your text here..."></textarea><br><br>
+    <button onclick="extractUrls()">Extract URLs</button><br><br>
+    <p id="urlCount">URLs found: 0</p>
+    <a id="downloadLink" style="display:none;">Download URLs</a><br><br>
+    <button id="downloadImagesButton" style="display:none;" onclick="downloadImages()">Download Images</button>
+
+    <div id="modal">
+        <div id="modalContent">
+            <h2>Downloading Images...</h2>
+            <div class="progress-bar">
+                <div class="progress-bar-fill" id="progressBar">0%</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let orderedUrls = [];
+
+        function extractUrls() {
+            const inputText = document.getElementById('inputText').value;
+            const urlPattern = /https?:\/\/[^\s"]+\.(jpg|jpeg|png|gif|bmp|webp|svg)/gi;
+            const urls = inputText.match(urlPattern);
+            orderedUrls = urls ? urls.sort() : [];
+            document.getElementById('urlCount').innerText = `URLs found: ${orderedUrls.length}`;
+
+            if (orderedUrls.length > 0) {
+                const fileContent = orderedUrls.map((url, index) => `${index + 1}. ${url}`).join('\n');
+                const blob = new Blob([fileContent], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const downloadLink = document.getElementById('downloadLink');
+                downloadLink.href = url;
+                downloadLink.download = 'image_urls.txt';
+                downloadLink.style.display = 'inline';
+                downloadLink.innerText = 'Download URLs';
+                document.getElementById('downloadImagesButton').style.display = 'inline';
+            } else {
+                document.getElementById('downloadLink').style.display = 'none';
+                document.getElementById('downloadImagesButton').style.display = 'none';
+            }
+        }
+
+        async function downloadImages() {
+            document.getElementById('modal').style.display = 'block';
+            const progressBar = document.getElementById('progressBar');
+            const zip = new JSZip();
+            const imgFolder = zip.folder("images");
+            const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+
+            const fetchImage = async (url, index) => {
+                const response = await fetch(proxyUrl + url);
+                if (!response.ok) throw new Error(`Failed to fetch ${url}`);
+                const blob = await response.blob();
+                const fileExtension = url.split('.').pop();
+                imgFolder.file(`image${index + 1}.${fileExtension}`, blob);
+                const progress = Math.round(((index + 1) / orderedUrls.length) * 100);
+                progressBar.style.width = progress + '%';
+                progressBar.innerText = progress + '%';
+            };
+
+            try {
+                await Promise.all(orderedUrls.map((url, index) => fetchImage(url, index)));
+                const content = await zip.generateAsync({ type: 'blob' });
+                saveAs(content, 'images.zip');
+            } catch (error) {
+                console.error('Error downloading images:', error);
+            } finally {
+                document.getElementById('modal').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
